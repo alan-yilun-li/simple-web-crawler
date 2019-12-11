@@ -13,6 +13,8 @@ Simple web-scraper tool (non-recursive, though easily modifiable) which searches
     - Facebook page id
     - iOS App Store id
     - Google Play Store id
+    
+Written for Python 3.7
 '''
 
 
