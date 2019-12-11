@@ -3,6 +3,8 @@ from urllib.request import build_opener
 from urllib.error import HTTPError
 from html.parser import HTMLParser
 
+import json
+
 from typing import List, Text, Dict, Optional, Tuple
 
 '''
@@ -76,13 +78,14 @@ def generate_input_urls() -> List[Text]:
     ]
 
 
-def main():
+def main() -> str:
     inputs = generate_input_urls()
     parser = WebsiteParser()
+    results: List[Dict[Text, Text]] = []
 
     for input in inputs:
         try:
-            print(parser.find_handles(input))
+            results.append(parser.find_handles(input))
         except HTTPError as error:
             print(f'failed while parsing input: {input}, {error}')
             if error.code == 503:
@@ -90,6 +93,8 @@ def main():
                 print('503 errors are likely due to being identified '
                       'as non-human traffic, or gated input was given.')
 
+    return_value = json.dumps(results, indent=4)
+    print(return_value)
 
 if __name__ == '__main__':
     main()
