@@ -38,6 +38,7 @@ class WebsiteParser(HTMLParser):
             if 'charset=utf-8' in header.lower():
                 read_response = read_response.decode('utf-8')
             self.feed(read_response)
+            print(self.handles)
             return self.handles
 
 
@@ -60,4 +61,3 @@ def match_handles(url: Text) -> Optional[Tuple[Text, Text]]:
         return 'google', parse_qs(parse_response.query)['id'][0]
 
     return None
-

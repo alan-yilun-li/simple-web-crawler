@@ -4,10 +4,11 @@ import json
 from queue import Queue
 from threading import Thread
 from urllib.error import HTTPError
+from collections import namedtuple
 
 from matching import WebsiteParser
 
-from typing import Text, List, Dict
+from typing import Text, List, Dict, Tuple
 
 '''
 This file contains the driving code directing which files to match and aggregating the results.
@@ -16,20 +17,55 @@ This file contains the driving code directing which files to match and aggregati
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+NUM_THREADS_IN_POOL = 15
+URLInput = namedtuple('URLInput', ['input_num', 'url', 'handles'])
+
+
+class ProcesserThread(Thread):
+
+    def __init__(self, queue, result_list):
+        Thread.__init__(self)
+        self.queue = queue
+        self.result_list = result_list
+
+    def run(self):
+        while True:
+            # Call blocks on queue empty
+            input_num, url, _ = self.queue.get()
+            try:
+                # Write to file instead of in-memory-store to handle more scale,
+                # need to handle ordering differently if this is the case.
+
+                # Use multiprocessing in addition to multi-threading if the CPU-bound work grows (Disk IO)
+                handles = WebsiteParser().find_handles(url)
+                self.result_list.append(URLInput(input_num, url, handles))
+            except HTTPError as error:
+                print(f'failed while parsing input: {input}, {error}')
+                if error.code == 503:
+                    # This is easily mitigated with the Python ``Requests`` external library.
+                    print('503 errors are likely due to being identified '
+                          'as non-human traffic, or gated input was given.')
+
+            finally:
+                self.queue.task_done()
+
 
 def scrape_inputs(inputs) -> Text:
-    parser = WebsiteParser()
-    results: List[Dict[Text, Text]] = []
+    url_queue = Queue()
+    results_store: Tuple[int, Dict[Text, Text]] = []
 
-    for input in inputs:
-        try:
-            results.append(parser.find_handles(input))
-        except HTTPError as error:
-            print(f'failed while parsing input: {input}, {error}')
-            if error.code == 503:
-                # This is easily mitigated with the Python ``Requests`` external library.
-                print('503 errors are likely due to being identified '
-                      'as non-human traffic, or gated input was given.')
+    for _ in range(NUM_THREADS_IN_POOL):
+        worker = ProcesserThread(url_queue, results_store)
+        # Allow process to terminate without worrying about worker loop
+        worker.daemon = True
+        worker.start()
 
-    return_value = json.dumps(results, indent=4)
+    for input_num, input in enumerate(inputs):
+        url_queue.put_nowait(URLInput(input_num, input, None))
+
+    url_queue.join()
+
+    # Including additional info to be able to sort them and include original URL information.
+    final_result = [item.handles for item in sorted(results_store, key=lambda item: item.input_num)]
+    return_value = json.dumps(final_result, indent=4)
     return return_value
