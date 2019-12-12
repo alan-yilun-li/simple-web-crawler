@@ -1,5 +1,4 @@
 from urllib.parse import urlparse, parse_qs
-from urllib.request import build_opener
 from html.parser import HTMLParser
 
 from typing import Text, Optional, Tuple, Dict
@@ -24,25 +23,20 @@ class WebsiteParser(HTMLParser):
                 self.handles[handle_id] = handle_value
 
 
-    def find_handles(self, url) -> Dict[Text, Text]:
-        self.baseUrl = url
+    def find_handles(self, response) -> Dict[Text, Text]:
+        '''Entry point for the HTML Parser to scrape for handles.'''
         self.handles: Dict[Text, Text] = {}
-
-        # work-around for when sites reject the standard User-Agent generated.
-        url_opener = build_opener()
-        url_opener.addheaders = [('User-agent', 'Mozilla/5.0')]
-        response = url_opener.open(url, timeout=3)
         header = response.getheader('Content-Type')
         if 'text/html' in header:
             read_response = response.read()
             if 'charset=utf-8' in header.lower():
                 read_response = read_response.decode('utf-8')
             self.feed(read_response)
-            print(self.handles)
             return self.handles
 
 
 def match_handles(url: Text) -> Optional[Tuple[Text, Text]]:
+    '''Parses for social media / app handles'''
     parse_response = urlparse(url)
 
     # splitting on '/' and fetching first section to allow for longer paths
@@ -61,3 +55,24 @@ def match_handles(url: Text) -> Optional[Tuple[Text, Text]]:
         return 'google', parse_qs(parse_response.query)['id'][0]
 
     return None
+
+
+def validate_url(url) -> Tuple[bool, Text]:
+    '''Validates a URL, returning True iff valid and a suggested URL'''
+
+    # Should use a library or some pre-made regex for this.
+    suggested_url = url
+
+    parsed_url = urlparse(url)
+    # If we want a more formal validation
+    # if not all([parsed_url.netloc, parsed_url.path]):
+    #     return False, ''
+
+    # More relaxed checks
+    if not '.' in url:
+        return False, ''
+
+    if parsed_url.scheme == '':
+        suggested_url = 'https://' + suggested_url
+
+    return True, suggested_url
